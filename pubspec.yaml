@@ -1,12 +1,13 @@
-name: searx
-description: Android app for searching the web with Searx
+name: searx_go
+description: "SearxGo: Um buscador rápido, privado e customizável."
 
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: '>=2.17.0 <3.0.0'  # Atualizado para compatibilidade com novas versões
+  # Elevado para 3.0.0 para garantir compatibilidade com as libs atuais
+  sdk: '>=3.0.0 <4.0.0' 
 
 dependencies:
   flutter:
@@ -14,18 +15,16 @@ dependencies:
 
   # 📦 Dependências principais
   cupertino_icons: ^1.0.6
-  http: ^1.2.0               # Para chamadas à API JSON (SUBSTITUI A WEBVIEW)
-  url_launcher: ^6.2.5       # Para abrir links no navegador
-  shared_preferences: ^2.2.2 # Para salvar preferências (se quiser)
-  fluttertoast: ^8.2.4       # Para mensagens rápidas
-  flutter_phoenix: ^1.1.0    # Para reiniciar o app (opcional)
-
-  # Ícones do launcher
-  flutter_launcher_icons: ^0.13.1
+  http: ^1.2.0               # Motor de busca (API JSON)
+  url_launcher: ^6.2.5       # Abertura de links
+  shared_preferences: ^2.2.2 # Persistência de configs
+  fluttertoast: ^8.2.4       # Notificações
+  flutter_phoenix: ^1.1.0    # Reset do app
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.13.1
 
 flutter_icons:
   android: "launcher_icon"
