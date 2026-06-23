@@ -39,4 +39,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/app/outputs/flutter-apk/app-release-*.apk
+          # Alterado para pegar qualquer APK na pasta de outputs
+          # Isso evita o erro de "No files found"
+          path: build/app/outputs/flutter-apk/*.apk
