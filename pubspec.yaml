@@ -6,7 +6,6 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  # Elevado para 3.0.0 para garantir compatibilidade com as libs atuais
   sdk: '>=3.0.0 <4.0.0' 
 
 dependencies:
@@ -20,6 +19,7 @@ dependencies:
   shared_preferences: ^2.2.2 # Persistência de configs
   fluttertoast: ^8.2.4       # Notificações
   flutter_phoenix: ^1.1.0    # Reset do app
+  flutter_custom_tabs: ^2.0.0  # <-- ADICIONADO AQUI
 
 dev_dependencies:
   flutter_test:
