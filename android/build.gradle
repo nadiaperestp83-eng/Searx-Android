@@ -1,13 +1,13 @@
 buildscript {
-    ext.kotlin_version = '1.8.22' // Atualizado para um Kotlin compatível
+    ext.kotlin_version = '1.8.22' 
     repositories {
         google()
-        mavenCentral() // jcenter() foi descontinuado, substitua por mavenCentral()
+        mavenCentral() 
     }
 
     dependencies {
-        // Atualizado para 7.3.0 - é o "limite" de compatibilidade para projetos mais antigos
-        classpath 'com.android.tools.build:gradle:7.3.0' 
+        // Atualizado para 7.4.2 para permitir compileSdk 34
+        classpath 'com.android.tools.build:gradle:7.4.2' 
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
