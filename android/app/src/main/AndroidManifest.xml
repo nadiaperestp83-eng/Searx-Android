@@ -7,8 +7,7 @@
         android:label="searx"
         android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true"
-        android:requestLegacyExternalStorage="true"
-        android:label="searx">
+        android:requestLegacyExternalStorage="true">
         
         <activity
             android:name=".MainActivity"
