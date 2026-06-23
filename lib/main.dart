@@ -1,212 +1,201 @@
-import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_phoenix/flutter_phoenix.dart';
-import 'settings.dart';
-import 'settingsPage.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
-extension StringExtension on String {
-  String capitalize() {
-    return "${this[0].toUpperCase()}${this.substring(1)}";
-  }
-}
-
-void main() {
-  runApp(
-    Phoenix(
-      child: MyApp(),
-    ),
-  );
-}
+void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Searx',
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primarySwatch: Colors.deepPurple,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+      title: 'Buscador Privado',
+      theme: ThemeData.light().copyWith(
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.grey[700]),
+        ),
       ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        primarySwatch: Colors.deepPurple,
-        primaryColor: Colors.deepPurple, //primarySwatch ignored when brightness is set to dark
-        accentColor: Colors.deepPurpleAccent,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
-      home: MyHomePage(title: 'Searx Home Page'),
+      home: SearchPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key? key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String? title;
-
+class SearchPage extends StatefulWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _SearchPageState createState() => _SearchPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
-  Completer<WebViewController> _controller = Completer<WebViewController>();
+class _SearchPageState extends State<SearchPage> {
+  final TextEditingController _controller = TextEditingController();
+  List<Map<String, dynamic>> _results = [];
+  bool _isLoading = false;
+  String _errorMessage = '';
 
-  @override
-  void initState() {
-    super.initState();
-      WidgetsBinding.instance!.addObserver(this);
-      if (Platform.isAndroid) WebView.platform = SurfaceAndroidWebView();
+  // ⚠️ SUBSTITUA PELA SUA URL DO RAILWAY
+  final String _baseUrl = 'https://searxng-railway-production-9bcc.up.railway.app';
+
+  Future<void> _search(String query) async {
+    if (query.trim().isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+      _results = [];
+    });
+
+    try {
+      final url = Uri.parse('$_baseUrl/search?q=${Uri.encodeComponent(query)}&format=json');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> results = data['results'] ?? [];
+        setState(() => _results = results.cast<Map<String, dynamic>>());
+      } else {
+        setState(() => _errorMessage = 'Erro: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() => _errorMessage = 'Erro de conexão: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: Settings().getURL(),
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return buildMain(context);
-        }
-        return buildLoad(context); // or some other widget
-      }
-    );
-  }
-
-  Widget buildLoad(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Loading'),
+        title: Text('Buscador Privado', style: TextStyle(color: Colors.grey[800])),
+        backgroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: Center(
-        child: CircularProgressIndicator()
-      ),
-    );
-  }
+      body: Column(
+        children: [
+          // Barra de pesquisa estilo Google
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _controller,
+                decoration: InputDecoration(
+                  hintText: 'Pesquisar...',
+                  prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+                  suffixIcon: _controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, color: Colors.grey[600]),
+                          onPressed: () {
+                            setState(() {
+                              _controller.clear();
+                              _results = [];
+                            });
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 14),
+                ),
+                onChanged: (text) => setState(() {}),
+                onSubmitted: (value) => _search(value),
+              ),
+            ),
+          ),
 
-  Widget buildMain(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: TextButton(
-          style: TextButton.styleFrom(
-            primary: Colors.white,
+          // Loading
+          if (_isLoading)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: CircularProgressIndicator(color: Colors.blue),
+            ),
+
+          // Erro
+          if (_errorMessage.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(_errorMessage, style: TextStyle(color: Colors.red)),
+            ),
+
+          // Resultados estilo Google
+          Expanded(
+            child: ListView.builder(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _results.length,
+              itemBuilder: (ctx, i) {
+                final item = _results[i];
+                final title = item['title'] ?? 'Sem título';
+                final url = item['url'] ?? '';
+                final content = item['content'] ?? '';
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          // Abrir URL (futuro)
+                        },
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            color: Colors.blue[800],
+                            fontSize: 18,
+                            fontWeight: FontWeight.w400,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        _extractDomain(url),
+                        style: TextStyle(
+                          color: Colors.green[700],
+                          fontSize: 14,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        content,
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 14,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Divider(height: 16, color: Colors.grey[300]),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
-          onPressed: () {
-            Phoenix.rebirth(context);
-          },
-          child: Text(
-            title,
-            style: TextStyle(fontSize: 20.0),
-          ),
-        ),
-        // This drop down menu demonstrates that Flutter widgets can be shown over the web view.
-        actions: <Widget>[
-          NavigationControls(_controller.future),
         ],
       ),
-      body: WebView(
-        initialUrl: searxURL,
-        javascriptMode: JavascriptMode.unrestricted,
-        onWebViewCreated: (WebViewController webViewController) {
-          _controller.complete(webViewController);
-        },
-      ),
     );
   }
 
-  @override
-  void didChangePlatformBrightness() {
-    final Brightness brightness =
-        WidgetsBinding.instance!.window.platformBrightness;
-    //inform listeners and rebuild widget tree
-  }
-}
-
-class NavigationControls extends StatelessWidget {
-  const NavigationControls(this._webViewControllerFuture);
-
-  final Future<WebViewController> _webViewControllerFuture;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<WebViewController>(
-      future: _webViewControllerFuture,
-      builder:
-          (BuildContext context, AsyncSnapshot<WebViewController> snapshot) {
-        final bool webViewReady =
-            snapshot.connectionState == ConnectionState.done;
-        final WebViewController? controller = snapshot.data;
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: <Widget>[
-            IconButton(
-              // constraints: BoxConstraints(),
-              icon: const Icon(Icons.arrow_back_ios),
-              tooltip: 'Go back',
-              onPressed: !webViewReady ? null : () => navigate(context, controller, goBack: true),
-            ),
-            IconButton(
-              // constraints: BoxConstraints(),
-              icon: const Icon(Icons.arrow_forward_ios),
-              tooltip: 'Go forward',
-              onPressed: !webViewReady ? null : () => navigate(context, controller, goBack: false),
-            ),
-            IconButton(
-              // constraints: BoxConstraints(),
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Refresh page',
-              onPressed: !webViewReady ? null : () => controller!.reload(),
-            ),
-            IconButton(
-              // constraints: BoxConstraints(),
-              icon: const Icon(Icons.public),
-              enableFeedback: true,
-              tooltip: 'Open with Browser',
-              onPressed: !webViewReady ? null : () async => await launch((await controller!.currentUrl())!,
-                forceSafariVC: false,
-                forceWebView: false,
-              ),
-            ),
-            IconButton(
-              // constraints: BoxConstraints(),
-              icon: const Icon(Icons.settings),
-              enableFeedback: true,
-              tooltip: 'Settings',
-              onPressed: !webViewReady ? null : () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => SettingsPage()),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  navigate(BuildContext context, WebViewController? controller,
-      {bool goBack: false}) async {
-    bool canNavigate =
-    goBack ? await controller!.canGoBack() : await controller!.canGoForward();
-    if (canNavigate) {
-      goBack ? controller.goBack() : controller.goForward();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text("No ${goBack ? 'back' : 'forward'} history item")),
-      );
+  String _extractDomain(String url) {
+    try {
+      final uri = Uri.parse(url);
+      String host = uri.host;
+      if (host.startsWith('www.')) host = host.substring(4);
+      return host;
+    } catch (_) {
+      return url;
     }
   }
 }
