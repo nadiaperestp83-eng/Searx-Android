@@ -50,6 +50,7 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void initState() {
     super.initState();
+    // Só atualiza o botão X — NÃO dispara busca
     _controller.addListener(() => setState(() {}));
     _loadSafeSearch();
   }
@@ -60,49 +61,59 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _search(String query) async {
-    if (query.trim().isEmpty) return;
-    _focusNode.unfocus();
+    final q = query.trim();
+    if (q.isEmpty) return;
 
+    _focusNode.unfocus();
     final baseURL = await _settings.getURL();
 
     setState(() {
       _isLoading = true;
+      _hasSearched = true;
       _errorMessage = '';
       _results = [];
-      _hasSearched = true;
     });
 
     try {
       final uri = Uri.parse(
-        '$baseURL/search?q=${Uri.encodeComponent(query)}&format=json&safesearch=$_safeSearch',
+        '$baseURL/search?q=${Uri.encodeComponent(q)}&format=json&safesearch=$_safeSearch',
       );
-      final response = await http.get(uri);
+
+      final response = await http.get(
+        uri,
+        headers: {'Accept': 'application/json'},
+      );
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> results = data['results'] ?? [];
-        setState(() => _results = results.cast<Map<String, dynamic>>());
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final List<dynamic> raw = data['results'] ?? [];
+        setState(() {
+          _results = raw.cast<Map<String, dynamic>>();
+          _isLoading = false;
+        });
       } else {
-        setState(() => _errorMessage = 'Erro ${response.statusCode}. Verifique a URL nas configurações.');
+        setState(() {
+          _errorMessage = 'Erro ${response.statusCode}. Verifique a URL nas configurações.';
+          _isLoading = false;
+        });
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Sem conexão ou instância indisponível.');
-    } finally {
-      setState(() => _isLoading = false);
+      setState(() {
+        _errorMessage = 'Sem conexão ou instância indisponível.';
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _openInDuckDuckGo(String url) async {
-    // Extrai scheme e host+path para montar o deep link do DDG
-    final parsed = Uri.parse(url);
-    final scheme = parsed.scheme; // https ou http
-    final rest = url.replaceFirst('$scheme://', ''); // remove o scheme://
-    final ddgUri = Uri.parse('android-app://com.duckduckgo.mobile.android/$scheme/$rest');
-
-    if (await canLaunchUrl(ddgUri)) {
-      await launchUrl(ddgUri);
+  Future<void> _openUrl(String url) async {
+    // Abre via DuckDuckGo URL API — dentro do app DDG com proteção
+    final ddgUrl = Uri.parse(
+      'https://duckduckgo.com/?q=!ducky+${Uri.encodeComponent(url)}',
+    );
+    if (await canLaunchUrl(ddgUrl)) {
+      await launchUrl(ddgUrl, mode: LaunchMode.externalApplication);
     } else {
-      // Fallback: abre no navegador padrão se DDG não estiver instalado
+      // Fallback direto
       final fallback = Uri.parse(url);
       await launchUrl(fallback, mode: LaunchMode.externalApplication);
     }
@@ -125,6 +136,7 @@ class _SearchPageState extends State<SearchPage> {
       _results = [];
       _hasSearched = false;
       _errorMessage = '';
+      _isLoading = false;
     });
     _focusNode.requestFocus();
   }
@@ -138,9 +150,6 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isEmpty = _controller.text.isEmpty;
-    final bool showHome = !_hasSearched && isEmpty;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: _hasSearched
@@ -176,11 +185,10 @@ class _SearchPageState extends State<SearchPage> {
                 ),
               ],
             ),
-      body: showHome ? _buildHomePage() : _buildResultsPage(),
+      body: _hasSearched ? _buildResultsPage() : _buildHomePage(),
     );
   }
 
-  // Tela inicial estilo Google
   Widget _buildHomePage() {
     return Center(
       child: SingleChildScrollView(
@@ -188,7 +196,6 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Logo
             const Text(
               'SearxGo',
               style: TextStyle(
@@ -199,28 +206,18 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
             const SizedBox(height: 32),
-
-            // Barra de pesquisa centralizada
             _buildSearchBar(compact: false),
-
             const SizedBox(height: 24),
-
-            // Botão pesquisar
             ElevatedButton(
               onPressed: () => _search(_controller.text),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFF1F3F4),
                 foregroundColor: const Color(0xFF1a1a1a),
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
               ),
-              child: const Text(
-                'Pesquisa Privada',
-                style: TextStyle(fontSize: 14),
-              ),
+              child: const Text('Pesquisa Privada', style: TextStyle(fontSize: 14)),
             ),
           ],
         ),
@@ -228,7 +225,6 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  // Barra de pesquisa reutilizável
   Widget _buildSearchBar({required bool compact}) {
     return Container(
       height: 46,
@@ -252,38 +248,28 @@ class _SearchPageState extends State<SearchPage> {
         controller: _controller,
         focusNode: _focusNode,
         textInputAction: TextInputAction.search,
-        style: const TextStyle(
-          fontSize: 16,
-          color: Color(0xFF1a1a1a),
-        ),
+        style: const TextStyle(fontSize: 16, color: Color(0xFF1a1a1a)),
         decoration: InputDecoration(
           hintText: 'Pesquisar...',
-          hintStyle: const TextStyle(
-            color: Color(0xFF9aa0a6),
-            fontSize: 16,
-          ),
-          prefixIcon: const Icon(
-            Icons.search,
-            color: Color(0xFF9aa0a6),
-            size: 22,
+          hintStyle: const TextStyle(color: Color(0xFF9aa0a6), fontSize: 16),
+          prefixIcon: GestureDetector(
+            onTap: () => _search(_controller.text),
+            child: const Icon(Icons.search, color: Color(0xFF9aa0a6), size: 22),
           ),
           suffixIcon: _controller.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.close,
-                      color: Color(0xFF9aa0a6), size: 20),
+                  icon: const Icon(Icons.close, color: Color(0xFF9aa0a6), size: 20),
                   onPressed: _clearSearch,
                 )
               : null,
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
         onSubmitted: _search,
       ),
     );
   }
 
-  // Página de resultados
   Widget _buildResultsPage() {
     return Column(
       children: [
@@ -310,22 +296,18 @@ class _SearchPageState extends State<SearchPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.search_off,
-                          size: 48, color: Colors.grey[300]),
+                      Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
                       const SizedBox(height: 12),
-                      Text(
-                        _errorMessage.isEmpty
-                            ? 'Nenhum resultado encontrado'
-                            : '',
-                        style: TextStyle(
-                            color: Colors.grey[400], fontSize: 15),
-                      ),
+                      if (_errorMessage.isEmpty)
+                        Text(
+                          'Nenhum resultado encontrado',
+                          style: TextStyle(color: Colors.grey[400], fontSize: 15),
+                        ),
                     ],
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: _results.length,
                   itemBuilder: (ctx, i) {
                     final item = _results[i];
@@ -335,14 +317,13 @@ class _SearchPageState extends State<SearchPage> {
                     final domain = _extractDomain(url);
 
                     return InkWell(
-                      onTap: () => _openInDuckDuckGo(url),
+                      onTap: () => _openUrl(url),
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Domínio
                             Row(
                               children: [
                                 Container(
@@ -353,22 +334,17 @@ class _SearchPageState extends State<SearchPage> {
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: const Icon(Icons.language,
-                                      size: 12,
-                                      color: Color(0xFF5f6368)),
+                                      size: 12, color: Color(0xFF5f6368)),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   domain,
                                   style: const TextStyle(
-                                    color: Color(0xFF202124),
-                                    fontSize: 13,
-                                  ),
+                                      color: Color(0xFF202124), fontSize: 13),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 4),
-
-                            // Título
                             Text(
                               title,
                               style: const TextStyle(
@@ -381,8 +357,6 @@ class _SearchPageState extends State<SearchPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
-
-                            // Descrição
                             if (content.isNotEmpty)
                               Text(
                                 content,
@@ -394,10 +368,8 @@ class _SearchPageState extends State<SearchPage> {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
-
                             const SizedBox(height: 12),
-                            const Divider(
-                                height: 1, color: Color(0xFFe8eaed)),
+                            const Divider(height: 1, color: Color(0xFFe8eaed)),
                           ],
                         ),
                       ),
