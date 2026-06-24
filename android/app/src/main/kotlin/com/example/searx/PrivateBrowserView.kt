@@ -80,11 +80,9 @@ class PrivateBrowserView(
     init {
         // Isolamento de perfil de dados (cookies, cache, etc.) – suportado a partir do Android 10 (API 29)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Define um suffixo único para isolar os dados deste WebView
             WebView.setDataDirectorySuffix("searx_private_$viewId")
         }
 
-        // CookieManager isolado – não compartilha com o resto do sistema
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
         cookieManager.removeAllCookies(null)
@@ -99,44 +97,35 @@ class PrivateBrowserView(
                 allowFileAccessFromFileURLs = false
                 allowUniversalAccessFromFileURLs = false
 
-                // Cache apenas em memória (padrão) – sem cache de app obsoleto
                 cacheMode = WebSettings.LOAD_DEFAULT
 
-                // Remove "wv" do User-Agent e esconde a versão do Android
                 val baseUA = WebSettings.getDefaultUserAgent(context)
                     .replace(Regex(" wv"), "")
                     .replace(Regex("; Android .*?\\)"), "; Android ${Build.VERSION.RELEASE})")
                 userAgentString = baseUA
 
-                // Prioridade de renderização (somente para versões antigas, hoje é automático)
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                     setRenderPriority(WebSettings.RenderPriority.HIGH)
                 }
 
-                // Desativa geolocalização
                 setGeolocationEnabled(false)
 
-                // Desativa Safe Browsing (evita envio de URLs ao Google)
+                // Safe Browsing – desativado para não enviar URLs ao Google
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
-                    WebSettingsCompat.setSafeBrowsingEnabled(this@apply.settings, false)
+                    WebSettingsCompat.setSafeBrowsingEnabled(this, false)   // <-- CORRIGIDO
                 }
 
-                // Exige gesto do usuário para reprodução de mídia
                 mediaPlaybackRequiresUserGesture = true
 
-                // Desativa o modo escuro forçado (respeita o site)
+                // Modo escuro forçado – desativado para respeitar o site
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
-                    WebSettingsCompat.setForceDark(
-                        this@apply.settings,
-                        WebSettingsCompat.FORCE_DARK_OFF
-                    )
+                    WebSettingsCompat.setForceDark(this, WebSettingsCompat.FORCE_DARK_OFF) // <-- CORRIGIDO
                 }
             }
 
-            // Aceleração gráfica por hardware
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
-            // ServiceWorker – bloqueia trackers antes do carregamento
+            // ServiceWorker – bloqueio de trackers antes do carregamento
             if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
                 ServiceWorkerControllerCompat.getInstance().apply {
                     setServiceWorkerClient(object : ServiceWorkerClientCompat() {
@@ -146,17 +135,12 @@ class PrivateBrowserView(
                             } else null
                         }
                     })
-                    // Configura cache do ServiceWorker (não tem cacheMode direto, usamos o padrão)
-                    // ServiceWorkerWebSettingsCompat não expõe cacheMode; mantemos LOAD_DEFAULT
-                    serviceWorkerWebSettings.apply {
-                        // Não há método setCacheMode, mas podemos manter o padrão
-                    }
+                    // Nota: ServiceWorkerWebSettingsCompat não expõe cacheMode, portanto mantemos o padrão
                 }
             }
 
             webViewClient = object : WebViewClient() {
 
-                // Intercepta TODAS as requisições – bloqueia trackers
                 override fun shouldInterceptRequest(
                     view: WebView,
                     request: WebResourceRequest
@@ -173,7 +157,7 @@ class PrivateBrowserView(
                 }
 
                 override fun onPageFinished(view: WebView, url: String) {
-                    // Injeta CSS para esconder banners de cookie automaticamente
+                    // Injeta CSS para ocultar banners de cookies
                     val bannerHider = """
                         (function() {
                             var style = document.createElement('style');
@@ -215,7 +199,6 @@ class PrivateBrowserView(
                     channel.invokeMethod("onProgress", newProgress)
                 }
 
-                // Bloqueia acesso à geolocalização
                 override fun onGeolocationPermissionsShowPrompt(
                     origin: String,
                     callback: GeolocationPermissions.Callback
@@ -223,14 +206,13 @@ class PrivateBrowserView(
                     callback.invoke(origin, false, false)
                 }
 
-                // Bloqueia permissões de mídia
                 override fun onPermissionRequest(request: PermissionRequest?) {
                     request?.deny()
                 }
             }
         }
 
-        // Canal Flutter → Kotlin
+        // Métodos expostos ao Flutter
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "loadUrl" -> {
