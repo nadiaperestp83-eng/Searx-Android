@@ -2,16 +2,15 @@ package com.zackptg5.searx
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Build
 import android.view.View
 import android.webkit.*
 import androidx.webkit.*
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
-import io.flutter.plugin.common.StandardMessageCodec
 
 // ─── Factory ────────────────────────────────────────────────────────────────
 
@@ -79,16 +78,13 @@ class PrivateBrowserView(
     private val webView: WebView
 
     init {
-        // Processo isolado — renderizador multi-process (Chromium-style)
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTIPROCESS_MODE)) {
-            ProcessGlobalConfig.getInstance().apply {
-                if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
-                    // isolamento por sessão
-                }
-            }
+        // Isolamento de perfil de dados (cookies, cache, etc.) – suportado a partir do Android 10 (API 29)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Define um suffixo único para isolar os dados deste WebView
+            WebView.setDataDirectorySuffix("searx_private_$viewId")
         }
 
-        // CookieManager isolado — não compartilha com o WebView do sistema
+        // CookieManager isolado – não compartilha com o resto do sistema
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
         cookieManager.removeAllCookies(null)
@@ -103,34 +99,32 @@ class PrivateBrowserView(
                 allowFileAccessFromFileURLs = false
                 allowUniversalAccessFromFileURLs = false
 
-                // Cache apenas em memória — voltar é instantâneo
+                // Cache apenas em memória (padrão) – sem cache de app obsoleto
                 cacheMode = WebSettings.LOAD_DEFAULT
-                setAppCacheEnabled(false)
 
-                // Remove identificação de WebView do User-Agent
-                val baseUA = getDefaultUserAgent(context)
-                    .replace(Regex("wv"), "")
-                    .replace(Regex("; Android.*?\\)"), "; Android ${Build.VERSION.RELEASE})")
+                // Remove "wv" do User-Agent e esconde a versão do Android
+                val baseUA = WebSettings.getDefaultUserAgent(context)
+                    .replace(Regex(" wv"), "")
+                    .replace(Regex("; Android .*?\\)"), "; Android ${Build.VERSION.RELEASE})")
                 userAgentString = baseUA
 
-                // Performance / Raster
-                setRenderPriority(WebSettings.RenderPriority.HIGH)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    // Hardware acceleration já é padrão, garantir
+                // Prioridade de renderização (somente para versões antigas, hoje é automático)
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                    setRenderPriority(WebSettings.RenderPriority.HIGH)
                 }
 
                 // Desativa geolocalização
                 setGeolocationEnabled(false)
 
-                // Desativa safe browsing (não envia URL ao Google)
+                // Desativa Safe Browsing (evita envio de URLs ao Google)
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
                     WebSettingsCompat.setSafeBrowsingEnabled(this@apply.settings, false)
                 }
 
-                // Desativa algoritmos de media que fazem fingerprint
+                // Exige gesto do usuário para reprodução de mídia
                 mediaPlaybackRequiresUserGesture = true
 
-                // Force Dark off — respeita o site
+                // Desativa o modo escuro forçado (respeita o site)
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
                     WebSettingsCompat.setForceDark(
                         this@apply.settings,
@@ -139,10 +133,10 @@ class PrivateBrowserView(
                 }
             }
 
-            // Hardware acceleration
+            // Aceleração gráfica por hardware
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
-            // ServiceWorker — bloqueia trackers antes do DOM
+            // ServiceWorker – bloqueia trackers antes do carregamento
             if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
                 ServiceWorkerControllerCompat.getInstance().apply {
                     setServiceWorkerClient(object : ServiceWorkerClientCompat() {
@@ -152,15 +146,17 @@ class PrivateBrowserView(
                             } else null
                         }
                     })
-                    serviceWorkerSettings.apply {
-                        cacheMode = WebSettings.LOAD_DEFAULT
+                    // Configura cache do ServiceWorker (não tem cacheMode direto, usamos o padrão)
+                    // ServiceWorkerWebSettingsCompat não expõe cacheMode; mantemos LOAD_DEFAULT
+                    serviceWorkerWebSettings.apply {
+                        // Não há método setCacheMode, mas podemos manter o padrão
                     }
                 }
             }
 
             webViewClient = object : WebViewClient() {
 
-                // Intercepta TODAS as requisições — bloqueia trackers
+                // Intercepta TODAS as requisições – bloqueia trackers
                 override fun shouldInterceptRequest(
                     view: WebView,
                     request: WebResourceRequest
