@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'settings.dart';
 import 'settingsPage.dart';
+import 'browser_page.dart';
 
 void main() => runApp(const SearxGoApp());
 
@@ -105,18 +105,11 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
-  Future<void> _openUrl(String url) async {
-    // Abre via DuckDuckGo URL API — dentro do app DDG com proteção
-    final ddgUrl = Uri.parse(
-      'https://duckduckgo.com/?q=!ducky+${Uri.encodeComponent(url)}',
+  void _openUrl(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => BrowserPage(url: url)),
     );
-    if (await canLaunchUrl(ddgUrl)) {
-      await launchUrl(ddgUrl, mode: LaunchMode.externalApplication);
-    } else {
-      // Fallback direto
-      final fallback = Uri.parse(url);
-      await launchUrl(fallback, mode: LaunchMode.externalApplication);
-    }
   }
 
   String _extractDomain(String url) {
