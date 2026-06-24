@@ -15,7 +15,6 @@ dependencies:
   # 📦 Dependências principais
   cupertino_icons: ^1.0.6
   http: ^1.2.0               # Motor de busca (API JSON)
-  url_launcher: ^6.2.5       # Abertura de links
   shared_preferences: ^2.2.2 # Persistência de configs
   fluttertoast: ^8.2.4       # Notificações
   flutter_phoenix: ^1.1.0    # Reset do app
